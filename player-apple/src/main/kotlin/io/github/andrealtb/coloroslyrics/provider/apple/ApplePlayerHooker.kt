@@ -154,7 +154,9 @@ class ApplePlayerHooker(
             (hookContext as? Application) ?: (hookContext.applicationContext as? Application)
         ) { "API 102 bootstrap did not provide the host Application instance" }
         val loader = appClassLoader
-        lyricRequester = AppleLyricRequester(loader, application)
+        lyricRequester = AppleLyricRequester(loader, application, onFailure = {
+            logFailure("lyric", "LYRIC_REQUEST_FAILED", it)
+        })
 
         installSessionHooks()
         installPlaybackItemHooks(loader)
@@ -204,17 +206,23 @@ class ApplePlayerHooker(
     private fun installLyricHooks(classLoader: ClassLoader) {
         runCatching {
             val viewModelClass = classLoader.loadClass(ApplePlayerConstants.PLAYER_LYRICS_VIEW_MODEL)
-            val playbackItemClass = classLoader.loadClass(ApplePlayerConstants.PLAYBACK_ITEM)
-            val loadMethod = findLoadLyricsMethod(viewModelClass, playbackItemClass)
-                ?: error("loadLyrics method not found")
-            lyricRequester?.setLoadLyricsMethod(loadMethod)
+            val requestClasses = listOfNotNull(
+                runCatching { classLoader.loadClass(ApplePlayerConstants.PLAYBACK_ITEM) }.getOrNull(),
+                runCatching { classLoader.loadClass(ApplePlayerConstants.SONG) }.getOrNull()
+            ).distinct()
+            val loadMethods = requestClasses.mapNotNull { findLoadLyricsMethod(viewModelClass, it) }
+                .distinct()
+            check(loadMethods.isNotEmpty()) { "loadLyrics method not found" }
+            lyricRequester?.setLoadLyricsMethods(loadMethods)
 
-            hookRuntime.hook(
-                loadMethod,
-                "apple.lyric.${loadMethod.declaringClass.name}#${loadMethod.name}"
-            ) {
-                before {
-                    onPlaybackItemObserved(args.getOrNull(0), requestIfMissing = false)
+            loadMethods.forEachIndexed { index, loadMethod ->
+                hookRuntime.hook(
+                    loadMethod,
+                    "apple.lyric.${loadMethod.declaringClass.name}#${loadMethod.name}$index"
+                ) {
+                    before {
+                        onPlaybackItemObserved(args.getOrNull(0), requestIfMissing = false)
+                    }
                 }
             }
             StructuredDiagnostics.logInfo(
@@ -222,7 +230,7 @@ class ApplePlayerHooker(
                     component = ApplePlayerConstants.COMPONENT,
                     area = "hook",
                     event = "LOAD_LYRICS_HOOK_INSTALLED",
-                    reason = loadMethod.name
+                    reason = loadMethods.joinToString { it.toGenericString() }
                 )
             )
         }.onFailure { logFailure("hook", "LOAD_LYRICS_HOOK_FAILED", it) }
@@ -437,6 +445,7 @@ class ApplePlayerHooker(
         }
         val boundTrack = generationPolicy.currentTrack ?: track
         val adamId = resolveAdamId(boundTrack).orEmpty()
+        val canRequestById = lyricRequester?.canRequestById == true
         if (adamId.isNotEmpty() && synchronized(lyricCacheById) { lyricCacheById[adamId] } != null) {
             publishCachedIfAvailable(boundTrack, generation)
             return
@@ -445,10 +454,14 @@ class ApplePlayerHooker(
                 boundTrack,
                 generation,
                 requestGeneration,
-                playbackItem != null
+                playbackItem != null,
+                canRequestById = canRequestById
             )
         ) {
-            if (playbackItem == null && AppleTrackBindPolicy.hasRequestableIdentity(boundTrack)) {
+            if (playbackItem == null &&
+                !(canRequestById && AppleLyricRequestFactory.usableMediaId(adamId) != null) &&
+                AppleTrackBindPolicy.hasRequestableIdentity(boundTrack)
+            ) {
                 StructuredDiagnostics.logDebug(
                     DiagnosticEvent(
                         component = ApplePlayerConstants.COMPONENT,
@@ -463,10 +476,11 @@ class ApplePlayerHooker(
             }
             return
         }
-        if (playbackItem == null) return
         requestGeneration = generation
         requestAttempts++
-        val accepted = lyricRequester?.requestDownload(playbackItem) == true
+        val accepted = lyricRequester?.requestDownload(playbackItem, adamId) {
+            generationController.acceptsPublication(boundTrack, generation)
+        } == true
         StructuredDiagnostics.logInfo(
             DiagnosticEvent(
                 component = ApplePlayerConstants.COMPONENT,
@@ -742,29 +756,32 @@ class ApplePlayerHooker(
 
     private fun findLoadLyricsMethod(
         viewModelClass: Class<*>,
-        playbackItemClass: Class<*>
+        requestClass: Class<*>
     ): Method? {
         val named = viewModelClass.declaredMethods.filter { method ->
             method.name == ApplePlayerConstants.LOAD_LYRICS &&
+                !Modifier.isStatic(method.modifiers) &&
                 method.parameterCount == 1 &&
-                playbackItemClass.isAssignableFrom(method.parameterTypes[0])
+                method.parameterTypes[0].isAssignableFrom(requestClass)
         }
         if (named.isNotEmpty()) {
+            val exact = named.filter { it.parameterTypes[0] == requestClass }
             return CandidateResolver.resolveUniqueMethod(
-                named,
+                exact.ifEmpty { named },
                 "${viewModelClass.name}#${ApplePlayerConstants.LOAD_LYRICS}",
                 hostVersion = hostVersion
             )
         }
         val structural = viewModelClass.declaredMethods.filter { method ->
-            method.parameterCount == 1 &&
-                playbackItemClass.isAssignableFrom(method.parameterTypes[0]) &&
+            !Modifier.isStatic(method.modifiers) && method.parameterCount == 1 &&
+                method.parameterTypes[0] != Any::class.java &&
+                method.parameterTypes[0].isAssignableFrom(requestClass) &&
                 method.returnType == Void.TYPE
         }
         return CandidateResolver.resolveUniqueMethod(
             structural,
             "${viewModelClass.name}#loadLyrics",
-            "single void method accepting PlaybackItem",
+            "single void method accepting ${requestClass.simpleName}",
             hostVersion
         )
     }

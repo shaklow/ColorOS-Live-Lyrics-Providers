@@ -9,10 +9,9 @@ package io.github.andrealtb.coloroslyrics.provider.apple
 import io.github.andrealtb.coloroslyrics.provider.core.model.TrackIdentity
 
 /**
- * loadLyrics is keyed off a matching PlaybackItem, not the first platform
- * MediaSession snapshot. Title-only metadata is enough to poll and to start
- * once a cached item matches by title/artist; adamId is filled by merging
- * the PlaybackItem into the current identity.
+ * loadLyrics uses a matching PlaybackItem, or a Song constructed with the
+ * authoritative MediaSession ID when supported by the host. Title-only
+ * metadata still waits for a cached item matching by title/artist.
  *
  * Cold skips (`lyrics-log-20260828-002416.txt`) used 1.5s/4s retries and no
  * PlaybackItem poll, so lockscreen stayed empty until the second or third
@@ -28,10 +27,13 @@ object AppleLyricRequestGate {
         track: TrackIdentity,
         generation: Long,
         lastRequestGeneration: Long?,
-        hasPlaybackItem: Boolean
+        hasPlaybackItem: Boolean,
+        canRequestById: Boolean = false
     ): Boolean {
         if (!AppleTrackBindPolicy.hasRequestableIdentity(track)) return false
-        if (!hasPlaybackItem) return false
+        if (!hasPlaybackItem &&
+            !(canRequestById && AppleLyricRequestFactory.usableMediaId(track.id) != null)
+        ) return false
         if (generation <= 0L) return false
         return lastRequestGeneration != generation
     }

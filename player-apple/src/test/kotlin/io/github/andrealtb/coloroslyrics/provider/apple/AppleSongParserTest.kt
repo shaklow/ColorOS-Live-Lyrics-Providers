@@ -6,6 +6,7 @@
 
 package io.github.andrealtb.coloroslyrics.provider.apple
 
+import kotlinx.serialization.json.Json
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -57,6 +58,72 @@ class AppleSongParserTest {
         assertEquals(true, AppleSongParser.applySystemTranslation(native, "zh-Hans"))
         assertEquals("zh-Hans", native.appliedTranslation)
         assertEquals(false, AppleSongParser.applySystemTranslation(native, " "))
+    }
+
+    @Test
+    fun capturesUpstreamAgentsAndBackgroundFieldsFromIntIndexedVectors() {
+        val parsed = AppleSongParser.parse(CurrentSongNative())!!
+        assertEquals(listOf(AppleLyricAgentModel("v1", 1L, listOf(1, 4))), parsed.agents)
+        val line = parsed.lyrics.single()
+        assertEquals("v1", line.agent)
+        assertEquals("和声译文", line.htmlTranslatedBackgroundVocalsLineText)
+        assertEquals("harmony pronunciation", line.htmlPronunciationBackgroundVocalsLineText)
+        assertEquals("v1", line.words.single().agent)
+        assertEquals("harmony", line.backgroundWords.single().text)
+        assertEquals(parsed, Json.decodeFromString<AppleSongModel>(
+            Json.encodeToString(AppleSongModel.serializer(), parsed)
+        ))
+    }
+
+    @Test
+    fun oldDiskCacheWithoutNewFieldsRemainsReadable() {
+        val old = """{"adamId":"1","lyrics":[{"htmlLineText":"lead","words":[{"text":"lead"}]}]}"""
+        val parsed = Json.decodeFromString<AppleSongModel>(old)
+        assertEquals(emptyList(), parsed.agents)
+        assertNull(parsed.lyrics.single().agent)
+        assertNull(parsed.lyrics.single().words.single().agent)
+        assertNull(parsed.lyrics.single().htmlTranslatedBackgroundVocalsLineText)
+    }
+
+    private class CurrentSongNative {
+        fun getAdamId(): Long = 1L
+        fun getAgents(): IntVector<FakePtr<AgentNative>> = IntVector(listOf(FakePtr(AgentNative())))
+        fun getSections(): IntVector<FakePtr<CurrentSectionNative>> =
+            IntVector(listOf(FakePtr(CurrentSectionNative())))
+    }
+
+    private class AgentNative {
+        fun getId(): String = "v1"
+        fun getType_(): Long = 1L
+        fun getNameTypes_(): IntArray = intArrayOf(1, 4)
+    }
+
+    private class CurrentSectionNative {
+        fun getLines(): IntVector<FakePtr<CurrentLineNative>> =
+            IntVector(listOf(FakePtr(CurrentLineNative())))
+    }
+
+    private class CurrentLineNative {
+        fun getAgent(): String = "v1"
+        fun getHtmlLineText(): String = "lead"
+        fun getHtmlTranslatedBackgroundVocalsLineText(): String = "和声译文"
+        fun getHtmlPronunciationBackgroundVocalsLineText(): String = "harmony pronunciation"
+        fun getWords(): IntVector<FakePtr<CurrentWordNative>> =
+            IntVector(listOf(FakePtr(CurrentWordNative("lead"))))
+        fun getBackgroundWords(includeWhitespace: Boolean): IntVector<FakePtr<CurrentWordNative>> {
+            check(!includeWhitespace)
+            return IntVector(listOf(FakePtr(CurrentWordNative("harmony"))))
+        }
+    }
+
+    private class CurrentWordNative(private val text: String) {
+        fun getAgent(): String = "v1"
+        fun getHtmlLineText(): String = text
+    }
+
+    private class IntVector<T>(private val items: List<T>) {
+        fun size(): Long = items.size.toLong()
+        fun get(index: Int): T = items[index]
     }
 
     private class FakeSongNative(

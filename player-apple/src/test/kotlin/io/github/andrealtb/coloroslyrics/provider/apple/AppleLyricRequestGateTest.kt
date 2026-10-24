@@ -83,6 +83,25 @@ class AppleLyricRequestGateTest {
     }
 
     @Test
+    fun allowsIdOnlyRequestWhenHostSupportsConstructedSong() {
+        assertTrue(AppleLyricRequestGate.shouldStartRequest(
+            complete, 1L, null, hasPlaybackItem = false, canRequestById = true
+        ))
+        assertFalse(AppleLyricRequestGate.shouldStartRequest(
+            complete.copy(id = null), 1L, null, hasPlaybackItem = false, canRequestById = true
+        ))
+        assertFalse(AppleLyricRequestGate.shouldStartRequest(
+            complete.copy(id = "0"), 1L, null, hasPlaybackItem = false, canRequestById = true
+        ))
+        assertFalse(AppleLyricRequestGate.shouldStartRequest(
+            complete, 1L, 1L, hasPlaybackItem = false, canRequestById = true
+        ))
+        assertFalse(AppleLyricRequestGate.shouldStartRequest(
+            complete, 0L, null, hasPlaybackItem = false, canRequestById = true
+        ))
+    }
+
+    @Test
     fun retriesThreeTimesWithBoundedDelays() {
         assertEquals(400L, AppleLyricRequestGate.retryDelayMs(1))
         assertEquals(1_200L, AppleLyricRequestGate.retryDelayMs(2))

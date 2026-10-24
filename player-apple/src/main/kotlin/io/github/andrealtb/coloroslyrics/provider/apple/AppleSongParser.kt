@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Andrea-TB
+ * Copyright 2026 Proify, Tomakino, Andrea-TB
  * Licensed under the Apache License, Version 2.0
  * http://www.apache.org/licenses/LICENSE-2.0
  */
@@ -17,7 +17,8 @@ object AppleSongParser {
         return AppleSongModel(
             adamId = adamId,
             durationMs = duration.toLong(),
-            lyrics = lyrics
+            lyrics = lyrics,
+            agents = AppleNativeCalls.call(songNative, "getAgents")?.let(::parseAgentVector).orEmpty()
         )
     }
 
@@ -26,35 +27,22 @@ object AppleSongParser {
         return AppleNativeCalls.callBoolean(songNative, "setTranslation", language) == true
     }
 
-    private fun parseSectionVector(vector: Any): List<AppleLyricLineModel> {
-        val size = AppleNativeCalls.vectorSize(vector)
-        val lines = mutableListOf<AppleLyricLineModel>()
-        var index = 0L
-        while (index < size) {
-            val sectionNative = AppleNativeCalls.unwrapPtr(AppleNativeCalls.vectorItem(vector, index))
-            if (sectionNative != null) {
-                AppleNativeCalls.call(sectionNative, "getLines")?.let { lineVector ->
-                    lines += parseLineVector(lineVector)
-                }
-            }
-            index++
+    private fun parseAgentVector(vector: Any): List<AppleLyricAgentModel> =
+        AppleNativeCalls.parseVector(vector) { native ->
+            AppleLyricAgentModel(
+                id = AppleNativeCalls.callString(native, "getId"),
+                type = AppleNativeCalls.callLong(native, "getType_"),
+                nameTypes = (AppleNativeCalls.call(native, "getNameTypes_") as? IntArray)
+                    ?.toList().orEmpty()
+            )
         }
-        return lines
-    }
 
-    private fun parseLineVector(vector: Any): List<AppleLyricLineModel> {
-        val size = AppleNativeCalls.vectorSize(vector)
-        val lines = mutableListOf<AppleLyricLineModel>()
-        var index = 0L
-        while (index < size) {
-            val lineNative = AppleNativeCalls.unwrapPtr(AppleNativeCalls.vectorItem(vector, index))
-            if (lineNative != null) {
-                lines += parseLine(lineNative)
+    private fun parseSectionVector(vector: Any): List<AppleLyricLineModel> =
+        AppleNativeCalls.parseVector(vector) { sectionNative ->
+            AppleNativeCalls.call(sectionNative, "getLines")?.let { lineVector ->
+                AppleNativeCalls.parseVector(lineVector, ::parseLine)
             }
-            index++
-        }
-        return lines
-    }
+        }.flatten()
 
     private fun parseLine(lineNative: Any): AppleLyricLineModel {
         val words = AppleNativeCalls.call(lineNative, "getWords")?.let(::parseWordVector).orEmpty()
@@ -70,6 +58,11 @@ object AppleSongParser {
                 AppleNativeCalls.callString(lineNative, "getHtmlBackgroundVocalsLineText"),
             htmlPronunciationLineText =
                 AppleNativeCalls.callString(lineNative, "getHtmlPronunciationLineText"),
+            htmlTranslatedBackgroundVocalsLineText =
+                AppleNativeCalls.callString(lineNative, "getHtmlTranslatedBackgroundVocalsLineText"),
+            htmlPronunciationBackgroundVocalsLineText =
+                AppleNativeCalls.callString(lineNative, "getHtmlPronunciationBackgroundVocalsLineText"),
+            agent = AppleNativeCalls.callString(lineNative, "getAgent"),
             words = words,
             backgroundWords = backgroundWords
         )
@@ -81,23 +74,15 @@ object AppleSongParser {
         return vector?.let(::parseWordVector).orEmpty()
     }
 
-    private fun parseWordVector(vector: Any): List<AppleLyricWordModel> {
-        val size = AppleNativeCalls.vectorSize(vector)
-        val words = mutableListOf<AppleLyricWordModel>()
-        var index = 0L
-        while (index < size) {
-            val wordNative = AppleNativeCalls.unwrapPtr(AppleNativeCalls.vectorItem(vector, index))
-            if (wordNative != null) {
-                words += AppleLyricWordModel(
-                    begin = AppleNativeCalls.callInt(wordNative, "getBegin"),
-                    end = AppleNativeCalls.callInt(wordNative, "getEnd"),
-                    duration = AppleNativeCalls.callInt(wordNative, "getDuration"),
-                    text = AppleNativeCalls.callString(wordNative, "getHtmlLineText"),
-                    whitespace = AppleNativeCalls.callBoolean(wordNative, "isWhitespace") == true
-                )
-            }
-            index++
+    private fun parseWordVector(vector: Any): List<AppleLyricWordModel> =
+        AppleNativeCalls.parseVector(vector) { wordNative ->
+            AppleLyricWordModel(
+                begin = AppleNativeCalls.callInt(wordNative, "getBegin"),
+                end = AppleNativeCalls.callInt(wordNative, "getEnd"),
+                duration = AppleNativeCalls.callInt(wordNative, "getDuration"),
+                text = AppleNativeCalls.callString(wordNative, "getHtmlLineText"),
+                whitespace = AppleNativeCalls.callBoolean(wordNative, "isWhitespace") == true,
+                agent = AppleNativeCalls.callString(wordNative, "getAgent")
+            )
         }
-        return words
-    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Andrea-TB
+ * Copyright 2026 Proify, Tomakino, Andrea-TB
  * Licensed under the Apache License, Version 2.0
  * http://www.apache.org/licenses/LICENSE-2.0
  */
@@ -10,7 +10,7 @@ import java.lang.reflect.Method
 
 internal object AppleNativeCalls {
     fun call(any: Any, name: String, vararg args: Any?): Any? = runCatching {
-        val method = findMethod(any.javaClass, name, args.size) ?: return@runCatching null
+        val method = findMethod(any.javaClass, name, args) ?: return@runCatching null
         method.isAccessible = true
         method.invoke(any, *args)
     }.getOrNull()
@@ -46,13 +46,41 @@ internal object AppleNativeCalls {
         return call(ptr, "get") ?: ptr
     }
 
-    private fun findMethod(type: Class<*>, name: String, parameterCount: Int): Method? {
-        val declared = type.declaredMethods.firstOrNull {
-            it.name == name && it.parameterCount == parameterCount
+    /** Native vectors contain smart pointers; missing elements are safe to skip. */
+    fun <T> parseVector(vector: Any, mapper: (Any) -> T?): List<T> {
+        val result = mutableListOf<T>()
+        var index = 0L
+        val size = vectorSize(vector)
+        while (index < size) {
+            unwrapPtr(vectorItem(vector, index))?.let { native ->
+                mapper(native)?.let(result::add)
+            }
+            index++
         }
-        if (declared != null) return declared
-        return type.methods.firstOrNull {
-            it.name == name && it.parameterCount == parameterCount
-        }
+        return result
     }
+
+    private fun findMethod(type: Class<*>, name: String, args: Array<out Any?>): Method? {
+        val candidates = generateSequence(type) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .plus(type.methods.asSequence())
+            .filter { it.name == name && it.parameterCount == args.size }
+            .distinctBy { it.parameterTypes.toList() }
+            .filter { method ->
+                method.parameterTypes.indices.all { index ->
+                    val argument = args[index]
+                    val parameter = method.parameterTypes[index]
+                    if (argument == null) !parameter.isPrimitive
+                    else boxed(parameter).isInstance(argument)
+                }
+            }.toList()
+        val exact = candidates.filter { method ->
+            method.parameterTypes.indices.all { index ->
+                boxed(method.parameterTypes[index]) == args[index]?.javaClass
+            }
+        }
+        return exact.singleOrNull() ?: candidates.singleOrNull()
+    }
+
+    private fun boxed(type: Class<*>): Class<*> = type.kotlin.javaObjectType
 }

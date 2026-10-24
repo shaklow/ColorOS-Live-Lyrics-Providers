@@ -10,4 +10,9 @@ The 4.0 migration baseline was created from LyricProvider commit
 292a7da3f88a87e8c6df6b4ae4f56455b6856c72. The migration retains source
 attribution in file headers and records module-level origin in docs/4.0.
 
+The player-apple module additionally incorporates the Song-based lyric request
+and native lyric model/parser updates from LyricProvider commit
+d6e66b49f41ae7b8867dee6a68f4ad2892e84d17, adapted to the native MediaSession
+lyricInfo publication path. See player-apple/README.md for the merge scope.
+
 Third-party libraries remain subject to their respective licenses and notices.

@@ -14,6 +14,7 @@ object ApplePlayerConstants {
     const val PLAYER_LYRICS_VIEW_MODEL =
         "com.apple.android.music.player.viewmodel.PlayerLyricsViewModel"
     const val PLAYBACK_ITEM = "com.apple.android.music.model.PlaybackItem"
+    const val SONG = "com.apple.android.music.model.Song"
     const val SONG_INFO_PTR =
         "com.apple.android.music.ttml.javanative.model.SongInfo\$SongInfoPtr"
     const val LOCALE_UTIL = "com.apple.android.music.playback.util.LocaleUtil"

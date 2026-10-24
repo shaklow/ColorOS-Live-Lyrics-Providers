@@ -96,6 +96,19 @@ class AppleLyriconProgressTest {
         assertEquals(listOf(2300L), positions)
     }
 
+    @Test
+    fun replayRetainsPausedSeekBeforePlayerIsAvailableWithoutStartingLoop() {
+        clock.onPlaying(false)
+        clock.onSeek(7300L)
+        playing.clear()
+        seeks.clear()
+        clock.replay()
+        assertEquals(listOf(false), playing)
+        assertEquals(listOf(7300L), seeks)
+        assertTrue(positions.isEmpty())
+        assertTrue(scheduled.isEmpty())
+    }
+
     private fun tick() {
         val task = scheduled.single()
         scheduled.remove(task)

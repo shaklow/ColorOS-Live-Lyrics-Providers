@@ -6,10 +6,6 @@
 
 package io.github.andrealtb.coloroslyrics.provider.apple
 
-import io.github.andrealtb.coloroslyrics.provider.hook102.ProviderAfterHook
-import io.github.andrealtb.coloroslyrics.provider.hook102.ProviderHookRuntime
-import io.github.andrealtb.coloroslyrics.provider.hook102.ProviderHookSpec
-import java.lang.reflect.Executable
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -51,7 +47,7 @@ class AppleLyriconPlaybackHooksTest {
     }
 
     private class Fixture(private val translationAvailable: Boolean = true) {
-        val runtime = RecordingRuntime()
+        val runtime = AppleRecordingHookRuntime()
         val playing = mutableListOf<Boolean>()
         val positions = mutableListOf<Long>()
         val seeks = mutableListOf<Long>()
@@ -84,26 +80,6 @@ class AppleLyriconPlaybackHooksTest {
             val task = tasks.single()
             tasks.remove(task)
             task.run()
-        }
-    }
-
-    /** Supplies host callbacks; the shared API 102 module separately tests framework dispatch. */
-    private class RecordingRuntime : ProviderHookRuntime {
-        private val specs = linkedMapOf<Executable, ProviderHookSpec>()
-        override val installedHookCount: Int get() = specs.size
-        override fun hook(executable: Executable, id: String, spec: ProviderHookSpec.() -> Unit): Boolean {
-            val constructor = ProviderHookSpec::class.java.getDeclaredConstructor().apply { isAccessible = true }
-            specs[executable] = constructor.newInstance().apply(spec)
-            return true
-        }
-
-        fun after(executable: Executable, receiver: Any, args: Array<Any?> = emptyArray()) {
-            val spec = specs.getValue(executable)
-            val field = ProviderHookSpec::class.java.getDeclaredField("afterCallback").apply { isAccessible = true }
-            @Suppress("UNCHECKED_CAST")
-            val callback = field.get(spec) as (ProviderAfterHook.() -> Unit)
-            val constructor = ProviderAfterHook::class.java.declaredConstructors.single().apply { isAccessible = true }
-            callback(constructor.newInstance(executable, receiver, args, null, null) as ProviderAfterHook)
         }
     }
 

@@ -20,7 +20,6 @@ import io.github.andrealtb.coloroslyrics.provider.core.model.TrackIdentity
 import io.github.proify.lyricon.provider.ConnectionListener
 import io.github.proify.lyricon.provider.LyriconFactory
 import io.github.proify.lyricon.provider.LyriconProvider
-import io.github.proify.lyricon.provider.ProviderConstants
 import io.github.proify.lyricon.provider.ProviderLogo
 
 /** Registers in the host process; the SDK caches state and replays it after reconnection. */
@@ -28,6 +27,7 @@ internal class AppleLyriconPublisher(
     private val context: Context,
     loadSong: (String) -> AppleSongModel?,
     requestLyrics: (TrackIdentity) -> Unit,
+    private val progress: AppleLyriconProgress,
     private val onEvent: (String) -> Unit,
     private val onFailure: (Throwable) -> Unit
 ) {
@@ -45,18 +45,6 @@ internal class AppleLyriconPublisher(
         provider.player.setSong(it)
         onEvent(if (it?.lyrics.isNullOrEmpty()) "LYRICON_PLACEHOLDER_SENT" else "LYRICON_LYRICS_SENT")
     }
-    val progress = AppleLyriconProgress(
-        sendPlaying = { playing -> safely {
-            ensureRegistered()
-            provider.player.setPlaybackState(playing)
-        } },
-        sendPosition = { safely { provider.player.setPosition(it) } },
-        sendSeek = { safely { provider.player.seekTo(it) } },
-        schedule = { task, delay -> handler.postDelayed(task, delay) },
-        cancel = { handler.removeCallbacks(it) },
-        intervalMs = ProviderConstants.DEFAULT_POSITION_UPDATE_INTERVAL,
-        onFailure = onFailure
-    )
     private var registrationTime = Long.MIN_VALUE
     private var retries = 0
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -122,6 +110,15 @@ internal class AppleLyriconPublisher(
     fun isCurrentId(id: String): Boolean = state.isCurrentId(id)
 
     fun onTranslation(selected: Boolean) = safely { provider.player.setDisplayTranslation(selected) }
+
+    fun onPlaying(playing: Boolean) = safely {
+        ensureRegistered()
+        provider.player.setPlaybackState(playing)
+    }
+
+    fun onPosition(position: Long) = safely { provider.player.setPosition(position) }
+
+    fun onSeek(position: Long) = safely { provider.player.seekTo(position) }
 
     fun clear() = safely {
         state.clear()

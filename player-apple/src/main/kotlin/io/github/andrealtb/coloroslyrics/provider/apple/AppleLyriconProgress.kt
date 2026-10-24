@@ -20,6 +20,7 @@ internal class AppleLyriconProgress(
     private var playing = false
     private var screenOn = true
     private var scheduled = false
+    private var lastPosition: Long? = null
 
     private val tick = object : Runnable {
         override fun run() = synchronized(this@AppleLyriconProgress) {
@@ -55,7 +56,17 @@ internal class AppleLyriconProgress(
     @Synchronized
     fun onSeek(position: Long) {
         // A paused seek must update the cached clock too, before playback resumes.
-        sendSeek(position.coerceAtLeast(0L))
+        lastPosition = position.coerceAtLeast(0L)
+        sendSeek(lastPosition!!)
+    }
+
+    /** Host events can precede SDK creation; restore their current clock after startup. */
+    @Synchronized
+    fun replay() {
+        sendPlaying(playing)
+        updatePosition()
+        lastPosition?.let(sendSeek)
+        if (playing && screenOn) scheduleNext()
     }
 
     @Synchronized
@@ -72,7 +83,11 @@ internal class AppleLyriconProgress(
 
     private fun updatePosition() {
         val reader = readPosition ?: return
-        runCatching { sendPosition(reader().coerceAtLeast(0L)) }.onFailure(onFailure)
+        runCatching {
+            val position = reader().coerceAtLeast(0L)
+            lastPosition = position
+            sendPosition(position)
+        }.onFailure(onFailure)
     }
 
     private fun scheduleNext() {

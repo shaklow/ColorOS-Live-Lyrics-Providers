@@ -25,6 +25,7 @@ import io.github.andrealtb.coloroslyrics.provider.core.policy.TrackIdentityPolic
 import io.github.andrealtb.coloroslyrics.provider.hook102.ProviderHookContext
 import io.github.andrealtb.coloroslyrics.provider.reflection.CandidateResolver
 import io.github.andrealtb.coloroslyrics.provider.reflection.DexKitBridge
+import io.github.proify.lyricon.provider.ProviderConstants
 import java.lang.ref.WeakReference
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -60,7 +61,21 @@ class ApplePlayerHooker(
     }
 
     private var replaySnapshot: AppleReplaySnapshot? = null
+
+    @Volatile
     private var lyriconPublisher: AppleLyriconPublisher? = null
+    private val lyriconLock = Any()
+    private var latestLyriconTrack: TrackIdentity? = null
+    private var latestLyriconTranslation: Boolean? = null
+    private val lyriconProgress = AppleLyriconProgress(
+        sendPlaying = { lyriconPublisher?.onPlaying(it) },
+        sendPosition = { lyriconPublisher?.onPosition(it) },
+        sendSeek = { lyriconPublisher?.onSeek(it) },
+        schedule = { task, delay -> mainHandler.postDelayed(task, delay) },
+        cancel = { mainHandler.removeCallbacks(it) },
+        intervalMs = ProviderConstants.DEFAULT_POSITION_UPDATE_INTERVAL,
+        onFailure = { logFailure("lyricon", "LYRICON_POSITION_FAILED", it) }
+    )
     private var lyricRequester: AppleLyricRequester? = null
     private var diskCache: AppleDiskSongCache? = null
 
@@ -150,25 +165,11 @@ class ApplePlayerHooker(
                 event = "HOOK_INITIALIZING",
                 mode = resolution.mode,
                 process = resolution.processName,
-                providerVersion = hostVersion
+                providerVersion = hostVersion,
+                reason = "module=${BuildConfig.VERSION_NAME}(${BuildConfig.VERSION_CODE})"
             )
         )
 
-        lyriconPublisher = runCatching {
-            AppleLyriconPublisher(
-                hookContext,
-                loadSong = ::loadNativeSong,
-                requestLyrics = ::requestLyriconLyrics,
-                onEvent = { event ->
-                    StructuredDiagnostics.logInfo(DiagnosticEvent(
-                        component = ApplePlayerConstants.COMPONENT,
-                        area = "lyricon",
-                        event = event
-                    ))
-                },
-                onFailure = { logFailure("lyricon", "LYRICON_SYNC_FAILED", it) }
-            ).also { it.initialize() }
-        }.onFailure { logFailure("lyricon", "LYRICON_INITIALIZATION_FAILED", it) }.getOrNull()
         diskCache = AppleDiskSongCache(hookContext)
         val application = checkNotNull(
             (hookContext as? Application) ?: (hookContext.applicationContext as? Application)
@@ -181,16 +182,27 @@ class ApplePlayerHooker(
         installSessionHooks()
         installPlaybackItemHooks(loader)
         installLyricHooks(loader)
-        lyriconPublisher?.let { publisher ->
-            AppleLyriconPlaybackHooks(
-                runtime = hookRuntime,
-                classLoader = loader,
-                progress = publisher.progress,
-                onTranslation = publisher::onTranslation,
-                onEvent = ::logLyriconEvent,
-                onFailure = { event, error -> logFailure("lyricon", event, error) }
-            ).install()
-        }
+        // Capture the player and early playback events even before the SDK can be created.
+        AppleLyriconPlaybackHooks(
+            runtime = hookRuntime,
+            classLoader = loader,
+            progress = lyriconProgress,
+            onTranslation = { selected -> synchronized(lyriconLock) {
+                latestLyriconTranslation = selected
+                lyriconPublisher?.onTranslation(selected)
+            } },
+            onEvent = ::logLyriconEvent,
+            onFailure = { event, error -> logFailure("lyricon", event, error) }
+        ).install()
+        AppleLyriconStartup(
+            application = application,
+            runtime = hookRuntime,
+            isContextReady = { application.applicationContext != null },
+            post = { task, delay -> mainHandler.postDelayed(task, delay) },
+            initialize = ::initializeLyricon,
+            onEvent = ::logLyriconEvent,
+            onFailure = { event, error -> logFailure("lyricon", event, error) }
+        ).install()
 
         StructuredDiagnostics.logInfo(
             DiagnosticEvent(
@@ -202,6 +214,28 @@ class ApplePlayerHooker(
                 providerVersion = hostVersion
             )
         )
+    }
+
+    private fun initializeLyricon() {
+        val publisher = AppleLyriconPublisher(
+            hookContext,
+            loadSong = ::loadNativeSong,
+            requestLyrics = ::requestLyriconLyrics,
+            progress = lyriconProgress,
+            onEvent = ::logLyriconEvent,
+            onFailure = { logFailure("lyricon", "LYRICON_SYNC_FAILED", it) }
+        ).also { it.initialize() }
+        synchronized(lyriconLock) {
+            lyriconPublisher = publisher
+            latestLyriconTrack?.let(publisher::onTrack)
+            latestLyriconTranslation?.let(publisher::onTranslation)
+        }
+        lyriconProgress.replay()
+    }
+
+    private fun onLyriconTrack(track: TrackIdentity) = synchronized(lyriconLock) {
+        latestLyriconTrack = track
+        lyriconPublisher?.onTrack(track)
     }
 
     private fun installPlaybackItemHooks(classLoader: ClassLoader) {
@@ -359,7 +393,7 @@ class ApplePlayerHooker(
                         if (track.id.isNullOrBlank()) return@after
                         // LyricProvider follows the host's committed media ID. Queue mapper
                         // observations and ColorOS generation/session gates do not own this state.
-                        lyriconPublisher?.onTrack(track)
+                        onLyriconTrack(track)
                     }
                 }
                 }

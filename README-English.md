@@ -86,13 +86,13 @@ tokens, or personal media paths.
 - `share:extensions-kt`, `share:extensions-android`, `share:lrckit` and
   `share:yrckit`: compatibility helpers still used by KuWo/NetEase; they are not installable apps.
 
-`io.github.proify.lyricon.lyric:model` remains only as a compatibility DTO dependency for
-KuWo/NetEase.
+`io.github.proify.lyricon.lyric:model` provides compatibility DTOs for KuWo/NetEase. In this
+fork, Apple Music Provider **1.3.0** also uses the Lyricon Provider SDK to register with
+Lyricon while retaining native ColorOS `lyricInfo` output. See
+[Apple Music Provider](player-apple/README.md) for installation and validation steps.
 
-This repository does not distribute Lyricon Providers. Obtain that product path from the
-[original LyricProvider project](https://github.com/tomakino/LyricProvider), and report Lyricon
-display/product issues there. Bridge and this repository handle only the ColorOS native
-`lyricInfo` path.
+For other players, obtain Lyricon adapters from the
+[original LyricProvider project](https://github.com/tomakino/LyricProvider).
 
 ## Adding a player
 

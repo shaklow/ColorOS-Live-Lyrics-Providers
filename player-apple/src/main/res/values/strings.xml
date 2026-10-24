@@ -7,6 +7,7 @@
 
 <resources>
     <string name="app_name">Apple Music Lyric Provider</string>
-    <string name="xposed_description">ColorOS lockscreen lyrics for Apple Music</string>
+    <string name="xposed_description">Apple Music lyrics for Lyricon and ColorOS</string>
+    <string name="lyricon_module_description">Apple Music lyrics, word timing, translations and background vocals</string>
     <string name="debug_settings_activity_label">Apple Music Lyric Provider Settings</string>
 </resources>

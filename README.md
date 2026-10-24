@@ -77,11 +77,12 @@ Metrolist 与 Spotify 不提供翻译；其余模块按各播放器证据使用�
 - `share:extensions-kt`、`share:extensions-android`、`share:lrckit`、
   `share:yrckit`：KuWo/NetEase 仍在使用的兼容 helper，不是可安装模块。
 
-`io.github.proify.lyricon.lyric:model` 目前仅作为 KuWo/NetEase 兼容 DTO 依赖；
+`io.github.proify.lyricon.lyric:model` 用于 KuWo/NetEase 兼容 DTO；本 fork 的 Apple Music
+Provider 从 **1.3.0** 起额外使用词幕 Provider SDK，同时支持词幕服务注册和 ColorOS
+原生 `lyricInfo`。词幕安装与验证步骤见 [Apple Music Provider](player-apple/README.md)。
 
-本仓库不分发词幕 Provider。需要词幕时请从
-[LyricProvider 原项目](https://github.com/tomakino/LyricProvider) 获取，并将词幕显示或
-产品链路问题反馈到原项目；Bridge 与本仓库只受理 ColorOS 原生 `lyricInfo` 链路问题。
+其他播放器的词幕适配请从
+[LyricProvider 原项目](https://github.com/tomakino/LyricProvider) 获取。
 
 ## 新增播放器适配
 

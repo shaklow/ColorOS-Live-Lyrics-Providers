@@ -54,8 +54,13 @@ class ApplePlayerHooker(
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ApplePublication>?): Boolean =
             size > 24
     }
+    private val nativeSongCacheById = object : LinkedHashMap<String, AppleSongModel>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AppleSongModel>?): Boolean =
+            size > 24
+    }
 
     private var replaySnapshot: AppleReplaySnapshot? = null
+    private var lyriconPublisher: AppleLyriconPublisher? = null
     private var lyricRequester: AppleLyricRequester? = null
     private var diskCache: AppleDiskSongCache? = null
 
@@ -149,6 +154,19 @@ class ApplePlayerHooker(
             )
         )
 
+        lyriconPublisher = runCatching {
+            AppleLyriconPublisher(
+                hookContext,
+                onEvent = { event ->
+                    StructuredDiagnostics.logInfo(DiagnosticEvent(
+                        component = ApplePlayerConstants.COMPONENT,
+                        area = "lyricon",
+                        event = event
+                    ))
+                },
+                onFailure = { logFailure("lyricon", "LYRICON_SYNC_FAILED", it) }
+            ).also { it.initialize() }
+        }.onFailure { logFailure("lyricon", "LYRICON_INITIALIZATION_FAILED", it) }.getOrNull()
         diskCache = AppleDiskSongCache(hookContext)
         val application = checkNotNull(
             (hookContext as? Application) ?: (hookContext.applicationContext as? Application)
@@ -283,7 +301,11 @@ class ApplePlayerHooker(
                         if (sessions.isModuleWrite()) return@before
                         val session = instanceOrNull as? MediaSession ?: return@before
                         if (sessions.isCastSession(session)) return@before
-                        val incoming = args.getOrNull(0) as? MediaMetadata ?: return@before
+                        val incoming = args.getOrNull(0) as? MediaMetadata
+                        if (incoming == null) {
+                            if (isCurrentSession(session)) lyriconPublisher?.clear()
+                            return@before
+                        }
                         val platformTrack = AppleTrackIdentity.fromMetadata(incoming)
                         // lyricInfo is appended into the host's own object; args[0] is never replaced.
                         sessions.onHostMetadata(session, platformTrack, incoming)
@@ -318,6 +340,13 @@ class ApplePlayerHooker(
                             )
                         }
                     }
+                    after {
+                        if (sessions.isModuleWrite()) return@after
+                        val session = instanceOrNull as? MediaSession ?: return@after
+                        if (isCurrentSession(session)) {
+                            lyriconPublisher?.onPlaybackState(session.controller.playbackState)
+                        }
+                    }
                 }
                 }
 
@@ -327,9 +356,11 @@ class ApplePlayerHooker(
                     hookRuntime.hook(method, "apple.session.MediaSession#setPlaybackState") {
                     after {
                         val session = instanceOrNull as? MediaSession ?: return@after
-                        val state = (args.getOrNull(0) as? PlaybackState)?.state
+                        val playbackState = args.getOrNull(0) as? PlaybackState
+                        val state = playbackState?.state
                             ?: PlaybackState.STATE_NONE
                         sessions.onPlaybackState(session, state)
+                        if (isCurrentSession(session)) lyriconPublisher?.onPlaybackState(playbackState)
                         drainPendingPublication()
                     }
                 }
@@ -352,6 +383,7 @@ class ApplePlayerHooker(
                 hookRuntime.hook(method, "apple.session.MediaSession#release") {
                     before {
                         val session = instanceOrNull as? MediaSession ?: return@before
+                        if (isCurrentSession(session)) lyriconPublisher?.clear()
                         sessions.onReleased(session)
                         synchronized(publicationLock) {
                             if (replaySnapshot?.session?.get() === session) replaySnapshot = null
@@ -360,6 +392,12 @@ class ApplePlayerHooker(
                 }
             }
         }.onFailure { logFailure("session", "SESSION_HOOK_FAILED", it) }
+    }
+
+    private fun isCurrentSession(session: MediaSession): Boolean {
+        val track = generationPolicy.currentTrack
+        val selected = if (track != null) sessions.selectUnique(track) else sessions.uniqueLiveSession()
+        return selected === session && !sessions.isCastSession(session)
     }
 
     private fun onPlaybackItemObserved(playbackItem: Any?, requestIfMissing: Boolean) {
@@ -396,6 +434,7 @@ class ApplePlayerHooker(
     private fun observeAuthoritativeTrack(track: TrackIdentity, source: String) {
         val previous = generationPolicy.currentTrack
         val generation = generationController.observeTrack(track)
+        lyriconPublisher?.onTrack(generationPolicy.currentTrack ?: track)
         if (previous == null || !TrackIdentityPolicy.isSameTrack(previous, track)) {
             StructuredDiagnostics.logInfo(
                 DiagnosticEvent(
@@ -414,8 +453,13 @@ class ApplePlayerHooker(
 
     private fun publishCachedIfAvailable(track: TrackIdentity, generation: Long) {
         val adamId = resolveAdamId(track) ?: return
+        val nativeSong = synchronized(nativeSongCacheById) { nativeSongCacheById[adamId] }
+            ?: diskCache?.load(adamId)?.also { song ->
+                synchronized(nativeSongCacheById) { nativeSongCacheById[adamId] = song }
+            }
+        nativeSong?.let { lyriconPublisher?.onSong(it) }
         val cached = synchronized(lyricCacheById) { lyricCacheById[adamId] }
-            ?: diskCache?.load(adamId)?.let { song ->
+            ?: nativeSong?.let { song ->
                 val lines = AppleSongMapper.toRichLines(song)
                 if (lines.isEmpty()) return@let null
                 ApplePublication(lines, track, "apple-disk-cache").also { publication ->
@@ -567,6 +611,8 @@ class ApplePlayerHooker(
             parsed
         }
         diskCache?.save(enriched)
+        synchronized(nativeSongCacheById) { nativeSongCacheById[enriched.adamId] = enriched }
+        lyriconPublisher?.onSong(enriched)
         val lines = AppleSongMapper.toRichLines(enriched)
         if (lines.isEmpty()) {
             logPublicationResult("NO_LYRIC", generationPolicy.generation)

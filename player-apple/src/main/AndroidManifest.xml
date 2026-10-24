@@ -17,6 +17,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppleProvider">
 
+        <meta-data android:name="lyricon_module" android:value="true" />
+        <meta-data android:name="lyricon_module_author" android:value="Proify, Tomakino, Andrea-TB, shaklow" />
+        <meta-data android:name="lyricon_module_description" android:value="@string/lyricon_module_description" />
+        <meta-data android:name="lyricon_module_tags" android:resource="@array/lyricon_module_tags" />
+
         <activity
             android:name=".AppleDebugSettingsActivity"
             android:exported="true"

@@ -24,8 +24,8 @@ configure<ApplicationExtension> {
         applicationId = "io.github.andrealtb.coloroslyrics.provider.apple"
         minSdk = 27
         targetSdk = rootProject.extra.get("targetSdkVersion") as Int
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -82,6 +82,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.lyricon.provider)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
 }

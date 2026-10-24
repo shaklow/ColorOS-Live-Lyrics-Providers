@@ -9,6 +9,7 @@ espressoCore = "3.7.0"
 kotlinxCoroutinesCore = "1.10.2"
 okhttp = "5.3.2"
 lyriconModel = "0.1.70"
+lyriconProvider = "0.1.70"
 taglib = "1.0.6"
 ksp = "2.3.6"
 kavaref-core = "1.0.2"
@@ -31,6 +32,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 lyricon-lyric-model = { module = "io.github.proify.lyricon.lyric:model", version.ref = "lyriconModel" }
+lyricon-provider = { module = "io.github.proify.lyricon:provider", version.ref = "lyriconProvider" }
 
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }

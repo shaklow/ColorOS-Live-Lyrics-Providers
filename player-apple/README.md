@@ -6,7 +6,7 @@
 
 ## 词幕安装与使用
 
-1. 覆盖安装 1.3.0 修复包，在 LSPosed 中启用模块并勾选 Apple Music。
+1. 覆盖安装 1.3.1 修复包，在 LSPosed 中启用模块并勾选 Apple Music。
 2. 完全停止并重新打开 Apple Music，使新的 Hook 与词幕服务注册代码加载。
 3. 在词幕的「歌词提供服务」中确认并启用 Apple Music Lyric Provider，再播放歌曲。
 
@@ -16,8 +16,13 @@ SDK 缓存当前歌曲与播放状态，连接恢复后重新同步；连接超�
 后续曲目和播放状态变化也会尝试恢复注册。
 
 词幕使用独立歌词映射，保留逐字时间、主唱翻译、背景人声及第二演唱者右对齐。
-暂停、快进、拖动和播放速度通过宿主 MediaSession 的 `PlaybackState` 同步给
-词幕 SDK；切歌立即清空上一首歌词，异步旧曲结果不覆盖当前歌曲。
+1.3.1 按官方 LyricProvider 的播放器链路同步词幕：
+`LocalMediaPlayerController.onPlaybackStateChanged` 的第三个参数为 Apple 状态，
+`1` 表示播放；通过 SDK 的布尔播放状态接口发送，并每约 41ms 从
+`ExoMediaPlayer.getCurrentPosition` 读取真实进度。拖动调用 SDK `seekTo`，
+暂停或熄屏停止轮询，亮屏/解锁后恢复。词幕链路不再混用 SDK 的
+`setPlaybackState(PlaybackState)` 自动进度模式。
+切歌立即发送新曲占位符，异步旧曲结果不覆盖当前歌曲。
 词幕的歌词发送不依赖 ColorOS 锁屏入口、封面就绪或 `lyricInfo` 发布门禁。
 
 ## LyricProvider 合并
@@ -67,7 +72,9 @@ Apple Music 的翻译歌词偏好设置。
 词幕四项模块元数据、启用标记、运行时注册代码和 API 102 入口均存在；
 签名证书与此前 fork 发布包相同。Lint 仍为上述两条存量资源告警。
 
-1.3.0 仍需在用户设备上确认词幕服务连接、歌词显示、暂停与拖动进度。
+用户设备反馈 1.3.0 服务已连接但无歌词。1.3.1 的逐项官方对照、修正原因和
+日志判读见 [词幕同步核对记录](../docs/APPLE-LYRICON-1.3.1-AUDIT.md)。
+本地没有连接用户手机，歌词显示和播放控制仍须真机确认。
 
 原有真机验证记录见
 [`PHASE-4-APPLE-MIGRATION-REPORT.md`](../docs/4.0/PHASE-4-APPLE-MIGRATION-REPORT.md)。

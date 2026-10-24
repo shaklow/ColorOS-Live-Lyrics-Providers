@@ -82,6 +82,44 @@ class AppleLyriconStateTest {
         assertEquals("lead", sent.last()!!.lyrics!!.single().text)
     }
 
+    @Test
+    fun committedMediaIdRequestsLyricsWithoutColorOsGenerationOrPlaybackItem() {
+        val requested = mutableListOf<String?>()
+        val pipeline = AppleLyriconState(requestLyrics = { requested.add(it.id) }) { sent.add(it) }
+        pipeline.onTrack(first)
+        pipeline.onTrack(first)
+        assertEquals(listOf<String?>("1"), requested)
+        assertTrue(pipeline.isCurrentId("1"))
+        pipeline.onTrack(second)
+        assertFalse(pipeline.isCurrentId("1"))
+        assertTrue(pipeline.isCurrentId("2"))
+        assertEquals(listOf<String?>("1", "2"), requested)
+        assertFalse(pipeline.onSong(song("1")))
+        assertTrue(pipeline.onSong(song("2")))
+    }
+
+    @Test
+    fun lyricsBuiltBeforeMetadataAreRecoveredFromCacheWhenIdCommits() {
+        val cache = mapOf("1" to song("1"))
+        val requested = mutableListOf<String?>()
+        val pipeline = AppleLyriconState(
+            loadSong = cache::get, requestLyrics = { requested.add(it.id) }
+        ) { sent.add(it) }
+        assertFalse(pipeline.onSong(cache.getValue("1")))
+        pipeline.onTrack(first)
+        assertEquals("lead", sent.last()!!.lyrics!!.single().text)
+        assertTrue(requested.isEmpty())
+    }
+
+    @Test
+    fun nativeSongIdentityDoesNotDependOnDifferentColorOsMetadataTitle() {
+        state.onTrack(first)
+        assertTrue(state.onSong(song("1").copy(name = "queue title", artist = "queue artist")))
+        assertEquals("First", sent.last()!!.name)
+        assertEquals("Artist", sent.last()!!.artist)
+        assertEquals("lead", sent.last()!!.lyrics!!.single().text)
+    }
+
     private fun song(id: String) = AppleSongModel(
         adamId = id,
         lyrics = listOf(AppleLyricLineModel(begin = 1000, end = 2000, htmlLineText = "lead"))

@@ -11,14 +11,18 @@ import io.github.andrealtb.coloroslyrics.provider.core.policy.TrackIdentityPolic
 import io.github.proify.lyricon.lyric.model.Song
 
 /** Keeps Lyricon's song independent of ColorOS session/artwork publication gates. */
-internal class AppleLyriconState(private val sendSong: (Song?) -> Unit) {
+internal class AppleLyriconState(
+    private val loadSong: (String) -> AppleSongModel? = { null },
+    private val requestLyrics: (TrackIdentity) -> Unit = {},
+    private val sendSong: (Song?) -> Unit
+) {
     private var currentTrack: TrackIdentity? = null
     private var nativeSong: AppleSongModel? = null
     private var lastSong: Song? = null
 
     @Synchronized
-    fun onTrack(track: TrackIdentity) {
-        if (track.isBlank) return
+    fun onTrack(track: TrackIdentity): Boolean {
+        if (track.isBlank) return false
         val previous = currentTrack
         val same = TrackIdentityPolicy.isSameTrack(previous, track)
         if (!same) nativeSong = null
@@ -26,7 +30,21 @@ internal class AppleLyriconState(private val sendSong: (Song?) -> Unit) {
             TrackIdentityPolicy.mergePreferringFilled(previous, track)
         } else track
         publish()
+        val changed = !same || previous?.id != currentTrack?.id
+        if (changed) {
+            currentTrack?.id?.let { id ->
+                loadSong(id)?.let(::onSong)
+                if (!hasLyrics()) requestLyrics(currentTrack!!)
+            }
+        }
+        return changed
     }
+
+    @Synchronized
+    fun isCurrentId(id: String): Boolean = currentTrack?.id == id
+
+    @Synchronized
+    fun hasLyrics(): Boolean = !nativeSong?.lyrics.isNullOrEmpty()
 
     @Synchronized
     fun onSong(song: AppleSongModel): Boolean {

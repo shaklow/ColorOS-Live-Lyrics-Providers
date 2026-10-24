@@ -268,8 +268,8 @@
       "module": "player-apple",
       "displayName": "Apple",
       "applicationId": "io.github.andrealtb.coloroslyrics.provider.apple",
-      "versionName": "1.3.2",
-      "versionCode": 7,
+      "versionName": "1.3.3",
+      "versionCode": 8,
       "asset": "ColorOS-Live-Lyrics-Provider-Apple-v4.5.2.apk",
       "entryClass": "io.github.andrealtb.coloroslyrics.provider.apple.AppleModuleEntry",
       "scopes": [

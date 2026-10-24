@@ -37,9 +37,7 @@ internal class AppleLyriconPublisher(
         context = context,
         providerPackageName = ApplePlayerConstants.MODULE_PACKAGE,
         playerPackageName = ApplePlayerConstants.HOST_PACKAGE,
-        logo = runCatching {
-            ProviderLogo.fromDrawable(context.applicationInfo.loadIcon(context.packageManager), 48, 48)
-        }.getOrNull()
+        logo = ProviderLogo.fromBase64(AppleLyriconLogo.BASE64)
     )
     private val state = AppleLyriconState(loadSong, requestLyrics) {
         provider.player.setSong(it)

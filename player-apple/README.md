@@ -6,7 +6,7 @@
 
 ## 词幕安装与使用
 
-1. 覆盖安装 1.3.2 修复包，在 LSPosed 中启用模块并勾选 Apple Music。
+1. 覆盖安装 1.3.3，在 LSPosed 中启用模块并勾选 Apple Music。
 2. 完全停止并重新打开 Apple Music，使新的 Hook 与词幕服务注册代码加载。
 3. 在词幕的「歌词提供服务」中确认并启用 Apple Music Lyric Provider，再播放歌曲。
 
@@ -14,6 +14,9 @@ Manifest 中的 `lyricon_module` 元数据负责让词幕识别已安装模块�
 进程启动后，通过 `LyriconFactory` 注册运行时服务。两者缺一不可。
 SDK 缓存当前歌曲与播放状态，连接恢复后重新同步；连接超时有有限次数重试，
 后续曲目和播放状态变化也会尝试恢复注册。
+
+1.3.3 使用官方 LyricProvider Apple Music Provider 的透明白色音符图标，
+将原样保留的 `Constants.ICON` 图片经 `ProviderLogo.fromBase64` 注册给词幕。
 
 1.3.2 修复设备日志证实的启动故障：API 102 在 `Application.attach` 中安装
 业务 Hook，此时 `applicationContext` 仍可能为 null，不能立即创建词幕 SDK。
@@ -82,7 +85,8 @@ Apple Music 的翻译歌词偏好设置。
 实际在 SDK 初始化时失败，界面连接状态不能作为本模块已就绪的证据。
 1.3.2 的定位、修复和验证见 [启动故障修复](../docs/APPLE-LYRICON-1.3.2-STARTUP-FIX.md)；
 此前官方事件链路对照见 [词幕同步核对记录](../docs/APPLE-LYRICON-1.3.1-AUDIT.md)。
-本地没有连接用户手机，歌词显示和播放控制仍须真机确认。
+用户已确认 1.3.2 歌词显示正常；1.3.3 补齐上述官方词幕图标。
+本地没有连接用户手机，1.3.3 图标显示及其他播放控制仍须真机确认。
 
 原有真机验证记录见
 [`PHASE-4-APPLE-MIGRATION-REPORT.md`](../docs/4.0/PHASE-4-APPLE-MIGRATION-REPORT.md)。
